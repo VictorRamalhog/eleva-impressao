@@ -1,0 +1,32 @@
+# Historico do projeto antigo (ERP), arquivado nesta pasta - nao vai para o GitHub
+.git-erp-antigo/
+
+# Formatos e preferencias criados na maquina (dado do usuario, nao do projeto)
+data/formatos-etiqueta.json
+data/preferencias.json
+
+# Saida de etiquetas (contem dados de comprador)
+labels/out/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Testes / ferramentas
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Editores / SO
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.swp

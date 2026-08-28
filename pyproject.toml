@@ -1,0 +1,55 @@
+[project]
+name = "eleva-impressao"
+version = "0.1.0"
+description = "Eleva Impressão — visualizar e imprimir etiqueta ZPL, sem internet."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.12",
+    "httpx>=0.27",
+    "pydantic>=2.9",
+    "pillow>=11.0",
+    "segno>=1.6",
+    "pywin32>=306; sys_platform == 'win32'",
+    "pywebview>=5.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "coverage>=7.6",
+    "ruff>=0.8",
+    "pyinstaller>=6.11",
+]
+
+[project.scripts]
+eleva-impressao = "eleva_impressao.desktop:executar"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eleva_impressao"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["error::DeprecationWarning:eleva_impressao.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["src/eleva_impressao"]
+branch = true

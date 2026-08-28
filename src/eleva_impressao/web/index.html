@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eleva Impressão</title>
+  <link rel="icon" href="/logo.png">
+  <link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+
+<header class="topo">
+  <div class="marca">
+    <img src="/logo.png" alt="Eleva" class="logo">
+    <div>
+      <h1>Impressão</h1>
+      <p class="sub">Etiquetas ZPL — visualizar, ajustar e imprimir</p>
+    </div>
+  </div>
+
+  <div class="estado-impressora" id="estadoImpressora" title="Estado da fila de impressão">
+    <span class="ponto" id="pontoEstado"></span>
+    <span id="textoEstado">procurando impressora…</span>
+  </div>
+</header>
+
+<main class="painel">
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="coluna-editor">
+    <div class="barra">
+      <strong>Código ZPL</strong>
+      <span class="dica" id="contagem"></span>
+    </div>
+
+    <textarea id="zpl" spellcheck="false" autocomplete="off"
+              placeholder="Cole aqui o ZPL da etiqueta, ou abra um arquivo .zpl"></textarea>
+
+    <div class="acoes">
+      <button id="btRedesenhar" class="botao">Redesenhar</button>
+      <button id="btAjustar" class="botao acento"
+              title="Reposiciona e redimensiona os campos para caberem na etiqueta. Não altera nome, SKU nem código de barras.">Ajustar automático</button>
+      <button id="btDesfazer" class="botao secundario" hidden>Desfazer ajuste</button>
+      <button id="btAbrir" class="botao secundario">Abrir arquivo…</button>
+      <button id="btImagem" class="botao secundario">Adicionar imagem…</button>
+      <button id="btExemplo" class="botao secundario">Exemplo</button>
+      <button id="btLimpar" class="botao secundario">Limpar</button>
+      <input type="file" id="arquivoZpl" accept=".zpl,.txt,.prn" hidden>
+      <input type="file" id="arquivoImagem" accept="image/*" hidden>
+    </div>
+
+    <div class="grupo">
+      <div class="grupo-titulo">Formato da etiqueta</div>
+
+      <label class="linha">
+        <span>Formato</span>
+        <select id="formato"></select>
+      </label>
+
+      <div class="resumo-formato" id="resumoFormato"></div>
+
+      <div class="acoes compactas">
+        <button id="btNovoFormato" class="botao secundario pequeno">Novo</button>
+        <button id="btEditarFormato" class="botao secundario pequeno">Editar</button>
+        <button id="btDuplicarFormato" class="botao secundario pequeno">Duplicar</button>
+        <button id="btApagarFormato" class="botao secundario pequeno perigo">Apagar</button>
+      </div>
+
+      <label class="linha">
+        <span>Densidade</span>
+        <select id="densidade">
+          <option value="6">6 dpmm (152 dpi)</option>
+          <option value="8" selected>8 dpmm (203 dpi)</option>
+          <option value="12">12 dpmm (300 dpi)</option>
+          <option value="24">24 dpmm (600 dpi)</option>
+        </select>
+      </label>
+
+      <label class="linha">
+        <span>Qualidade</span>
+        <select id="qualidade">
+          <option value="cinza">Tons de cinza (tela)</option>
+          <option value="bitonal">Preto e branco (papel)</option>
+        </select>
+      </label>
+
+      <label class="linha">
+        <span>Rotação</span>
+        <select id="rotacao">
+          <option value="0">0°</option>
+          <option value="90">90°</option>
+          <option value="180">180°</option>
+          <option value="270">270°</option>
+        </select>
+      </label>
+
+      <label class="linha">
+        <span>Motor</span>
+        <select id="motor">
+          <option value="local">Local (offline, igual ao papel)</option>
+          <option value="labelary">Labelary (online, referência)</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------ -->
+  <section class="coluna-preview">
+    <div class="barra">
+      <div class="abas">
+        <button class="aba ativa" data-visao="etiqueta">Etiqueta</button>
+        <button class="aba" data-visao="folha">Como vai imprimir</button>
+      </div>
+      <div class="navegacao">
+        <button id="btAnterior" class="botao secundario pequeno">◀</button>
+        <span id="posicao">—</span>
+        <button id="btProxima" class="botao secundario pequeno">▶</button>
+        <select id="zoom" title="Ampliação do preview">
+          <option value="auto" selected>Ajustar</option>
+          <option value="0.5">50%</option>
+          <option value="1">100%</option>
+          <option value="2">200%</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="palco" id="palco">
+      <div class="papel" id="papel">
+        <img id="preview" alt="Prévia da etiqueta">
+        <div class="guias" id="guias"></div>
+      </div>
+      <p class="medida" id="medida"></p>
+    </div>
+
+    <div class="avisos" id="avisos" hidden></div>
+  </section>
+</main>
+
+<!-- -------------------------------------------------------------------- -->
+<footer class="rodape">
+  <div class="bloco">
+    <label class="linha">
+      <span>Impressora</span>
+      <select id="impressora"></select>
+    </label>
+    <label class="linha">
+      <span>Modo</span>
+      <select id="modo">
+        <option value="imagem">Imagem pelo driver (padrão)</option>
+        <option value="tspl">TSPL — bitmap direto</option>
+        <option value="zpl">ZPL cru</option>
+      </select>
+    </label>
+    <label class="linha estreita">
+      <span>Cópias</span>
+      <input type="number" id="copias" min="1" max="99" value="1">
+    </label>
+    <label class="linha estreita" title="Distância entre etiquetas no rolo (só no modo TSPL)">
+      <span>Gap mm</span>
+      <input type="number" id="gap" min="0" max="20" step="0.5" value="2">
+    </label>
+    <label class="linha caixa">
+      <input type="checkbox" id="apenasEsta">
+      <span>Só a etiqueta em foco</span>
+    </label>
+  </div>
+
+  <div class="bloco acoes-impressao">
+    <button id="btConferir" class="botao secundario">Conferir driver</button>
+    <button id="btTeste" class="botao secundario">Etiqueta de teste</button>
+    <button id="btPng" class="botao secundario">PNG</button>
+    <button id="btPdf" class="botao secundario">PDF</button>
+    <button id="btImprimir" class="botao destaque">Imprimir</button>
+  </div>
+</footer>
+
+<div class="aviso-modo" id="avisoModo"></div>
+
+<!-- ------------------------- diálogo de formato ------------------------ -->
+<dialog id="dialogoFormato">
+  <form method="dialog" id="formularioFormato">
+    <h2 id="tituloDialogo">Novo formato</h2>
+
+    <label class="campo">
+      <span>Nome</span>
+      <input type="text" id="fNome" required maxlength="60" placeholder="Ex.: Produto 40 × 25">
+    </label>
+
+    <div class="dupla">
+      <label class="campo">
+        <span>Largura da etiqueta (mm)</span>
+        <input type="number" id="fLargura" min="5" max="110" step="0.1" required>
+      </label>
+      <label class="campo">
+        <span>Altura da etiqueta (mm)</span>
+        <input type="number" id="fAltura" min="5" max="500" step="0.1" required>
+      </label>
+    </div>
+
+    <div class="dupla">
+      <label class="campo">
+        <span>Colunas no papel</span>
+        <select id="fColunas">
+          <option value="1">1 coluna</option>
+          <option value="2">2 colunas</option>
+        </select>
+      </label>
+      <label class="campo">
+        <span>Espaço entre colunas (mm)</span>
+        <input type="number" id="fEspaco" min="0" max="20" step="0.5" value="2">
+      </label>
+    </div>
+
+    <div class="dupla">
+      <label class="campo">
+        <span>Densidade</span>
+        <select id="fDpmm">
+          <option value="6">6 dpmm (152 dpi)</option>
+          <option value="8" selected>8 dpmm (203 dpi)</option>
+          <option value="12">12 dpmm (300 dpi)</option>
+          <option value="24">24 dpmm (600 dpi)</option>
+        </select>
+      </label>
+      <label class="campo">
+        <span>Margem do papel (mm)</span>
+        <input type="number" id="fMargem" min="0" max="20" step="0.5" value="0">
+      </label>
+    </div>
+
+    <label class="campo caixa" id="linhaColunasNoZpl">
+      <input type="checkbox" id="fColunasNoZpl">
+      <span>O próprio ZPL já traz as duas colunas dentro de um <code>^XA</code></span>
+    </label>
+    <p class="nota" id="notaColunasNoZpl">É assim que o Mercado Livre entrega a
+      etiqueta de duas vias: um arquivo só, com a segunda coluna desenhada mais
+      à direita. Marcado, o programa desenha a folha inteira e não monta par
+      nenhum — o arquivo já vem montado.</p>
+
+    <p class="nota" id="notaFormato"></p>
+    <p class="erro" id="erroFormato" hidden></p>
+
+    <menu>
+      <button value="cancelar" class="botao secundario">Cancelar</button>
+      <button value="salvar" id="btSalvarFormato" class="botao destaque">Salvar</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- ------------------------- diálogo de imagem ------------------------- -->
+<dialog id="dialogoImagem">
+  <form method="dialog" id="formularioImagem">
+    <h2>Adicionar imagem à etiqueta</h2>
+    <div class="previa-imagem"><img id="previaImagem" alt=""></div>
+
+    <div class="dupla">
+      <label class="campo">
+        <span>Posição X (pontos)</span>
+        <input type="number" id="iX" value="40" min="0">
+      </label>
+      <label class="campo">
+        <span>Posição Y (pontos)</span>
+        <input type="number" id="iY" value="40" min="0">
+      </label>
+    </div>
+
+    <div class="dupla">
+      <label class="campo">
+        <span>Largura (pontos)</span>
+        <input type="number" id="iLargura" value="400" min="8">
+      </label>
+      <label class="campo">
+        <span>Limiar preto/branco</span>
+        <input type="range" id="iLimiar" min="16" max="240" value="128">
+      </label>
+    </div>
+
+    <label class="campo caixa">
+      <input type="checkbox" id="iInverter">
+      <span>Inverter (fundo preto)</span>
+    </label>
+
+    <p class="nota">A imagem entra no ZPL como <code>^GF</code> comprimido — a etiqueta
+      continua sendo um arquivo de texto.</p>
+
+    <menu>
+      <button value="cancelar" class="botao secundario">Cancelar</button>
+      <button value="inserir" class="botao destaque">Inserir</button>
+    </menu>
+  </form>
+</dialog>
+
+<div class="recado" id="recado" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

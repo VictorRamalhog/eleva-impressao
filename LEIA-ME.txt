@@ -1,0 +1,101 @@
+ELEVA IMPRESSAO 1.0
+Programa para ver e imprimir etiquetas do Mercado Livre.
+
+
+COMO INSTALAR
+-------------
+
+Nao precisa instalar nada. E um arquivo so.
+
+1. Baixe o arquivo "Eleva Impressao 1.0.exe".
+2. Salve na Area de Trabalho.
+3. De dois cliques nele.
+
+Na primeira vez o Windows pode mostrar uma tela azul dizendo
+"O Windows protegeu o seu PC".
+
+   Isso NAO e virus. E so porque o programa e novo e ainda nao tem
+   assinatura digital paga. Para continuar:
+
+   - clique em "Mais informacoes"
+   - depois clique em "Executar assim mesmo"
+
+Isso acontece so na primeira vez.
+
+O programa demora uns 8 segundos para abrir e mostra a marca ELEVA
+enquanto carrega. Nao clique duas vezes: espere.
+
+
+COMO USAR
+---------
+
+1. Ligue a impressora de etiquetas no cabo USB e espere o Windows
+   reconhecer.
+2. Abra o programa. No canto superior direito tem de aparecer a bolinha
+   VERDE com o nome da impressora. Se aparecer vermelha, a impressora
+   nao foi encontrada.
+3. Cole o codigo da etiqueta (ZPL) na caixa da esquerda.
+4. Escolha o FORMATO:
+     - "Mercado Livre 100 x 150 mm"  -> etiqueta grande de envio
+     - "Mercado Livre - par ja no ZPL - 40 x 25 mm" -> etiqueta pequena,
+       aquela que sai duas lado a lado
+5. Confira o desenho a direita: e exatamente o que vai sair no papel.
+6. Clique em IMPRIMIR.
+
+
+O BOTAO LARANJA "AJUSTAR AUTOMATICO"
+------------------------------------
+
+Se o texto ficar torto, passando por cima de outro, ou o codigo de
+barras ficar maior que a etiqueta, clique em "Ajustar automatico".
+
+Ele arruma a posicao e o tamanho das coisas para caber tudo na etiqueta.
+
+Ele NUNCA muda o nome do produto, o SKU nem o codigo de barras.
+So mexe em onde cada coisa fica e no tamanho da letra.
+
+Se nao gostar do resultado, clique em "Desfazer ajuste".
+
+
+SE A IMPRESSAO SAIR ERRADA
+--------------------------
+
+Se sair varias etiquetas EM BRANCO junto com a impressa:
+   O programa avisa antes e explica. Troque o campo "Modo" (na barra de
+   baixo) para "TSPL - bitmap direto" e imprima de novo.
+
+Se nao sair NADA no papel:
+   Tente os outros modos, um por vez, na ordem:
+   1. Imagem pelo driver
+   2. TSPL - bitmap direto
+   3. ZPL cru
+
+   O programa lembra sozinho qual funcionou; e so acertar uma vez.
+
+Antes de gastar etiqueta, o botao "Conferir driver" diz se o tamanho do
+papel configurado no Windows bate com o formato escolhido. Ele nao
+imprime nada.
+
+O botao "Etiqueta de teste" imprime UMA etiqueta com uma moldura e uma
+regua de 10 em 10 mm:
+   - se faltar um lado da moldura, a etiqueta esta torta no papel
+   - se a regua nao bater com uma regua de verdade, o tamanho esta errado
+
+
+ONDE FICAM AS CONFIGURACOES
+---------------------------
+
+Os formatos que voce criar e o modo de impressao ficam guardados em:
+
+   C:\Usuarios\<seu nome>\AppData\Local\Eleva Impressao
+
+O codigo ZPL da caixa NAO fica salvo: ele vem novo do Mercado Livre a
+cada remessa.
+
+
+PRECISA DE INTERNET?
+--------------------
+
+Nao. O programa desenha as etiquetas sozinho, no proprio computador.
+Internet so e usada se voce escolher o motor "Labelary", que serve
+apenas para conferir o desenho.

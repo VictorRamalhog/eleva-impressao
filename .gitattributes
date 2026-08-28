@@ -1,0 +1,11 @@
+# Normaliza fim de linha no repositorio, mantendo CRLF no que o Windows abre
+# no Bloco de Notas.
+* text=auto
+
+*.txt   text eol=crlf
+*.ps1   text eol=crlf
+
+*.png   binary
+*.ico   binary
+*.exe   binary
+*.spec  text

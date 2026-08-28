@@ -14,8 +14,8 @@ Não pede login, não fala com o Mercado Livre e não guarda credencial nenhuma.
 
 ### 👉 [Clique aqui para baixar](../../releases/latest)
 
-Na página que abrir, procure a palavra **Assets** lá embaixo e clique em
-**`Eleva Impressao 1.0.exe`**. O download tem uns 30 MB.
+Na página que abrir, procure a palavra **Assets** lá embaixo e clique no
+arquivo que termina em **`.exe`**. O download tem uns 30 MB.
 
 Depois:
 

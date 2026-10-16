@@ -1,4 +1,4 @@
-ELEVA IMPRESSAO 1.0
+ELEVA IMPRESSAO 1.1
 Programa para ver e imprimir etiquetas do Mercado Livre.
 
 
@@ -7,7 +7,7 @@ COMO INSTALAR
 
 Nao precisa instalar nada. E um arquivo so.
 
-1. Baixe o arquivo "Eleva Impressao 1.0.exe".
+1. Baixe o arquivo "Eleva Impressao 1.1.exe".
 2. Salve na Area de Trabalho.
 3. De dois cliques nele.
 

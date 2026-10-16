@@ -30,7 +30,7 @@ from starlette.concurrency import run_in_threadpool
 
 from eleva_impressao import ajuste, formatos, graficos, pdf, preferencias, render, windows
 
-VERSAO = "1.0"
+VERSAO = "1.1"
 TITULO = "Eleva Impressão"
 LABELARY_URL = "https://api.labelary.com/v1/printers/{dpmm}dpmm/labels/{largura}x{altura}/{indice}/"
 

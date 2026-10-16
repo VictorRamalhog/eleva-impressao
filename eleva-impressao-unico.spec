@@ -1,7 +1,7 @@
 # Receita do arquivo **único** — o que vai para o Drive.
 #
 # Rodar:  uv run pyinstaller eleva-impressao-unico.spec --noconfirm
-# Sai em: dist/Eleva Impressao 1.0.exe
+# Sai em: dist/Eleva Impressao 1.1.exe
 #
 # Por que existem duas receitas, e não uma:
 #
@@ -82,7 +82,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="Eleva Impressao 1.0",
+    name="Eleva Impressao 1.1",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -1,6 +1,6 @@
 [project]
 name = "eleva-impressao"
-version = "0.1.0"
+version = "1.1.0"
 description = "Eleva Impressão — visualizar e imprimir etiqueta ZPL, sem internet."
 readme = "README.md"
 requires-python = ">=3.11"

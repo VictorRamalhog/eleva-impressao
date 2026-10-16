@@ -21,7 +21,12 @@ const estado = {
   editandoFormato: null,
   imagemPendente: null,
   zplAntesDoAjuste: null,
-  preferencias: { impressoras: {}, formato_id: '', impressora: '' },
+  preferencias: { impressoras: {}, formato_id: '', formato_pdf_id: '', impressora: '' },
+  // PDF aberto: { id, nome, paginas, recortes, marcados: Set }. Nulo = modo ZPL.
+  // O PDF mora no servidor, em memória; a tela só guarda o id e o que marcar.
+  pdf: null,
+  formatoPdfPadrao: '',
+  formatoAntesDoPdf: '',
 };
 
 /* ------------------------------------------------------------------ rede */
@@ -72,6 +77,8 @@ function pedidoBase() {
     motor: $('motor').value,
     visao: estado.visao,
     dpmm: Number($('densidade').value),
+    pdf_id: estado.pdf ? estado.pdf.id : '',
+    pdf_recortes: estado.pdf ? [...estado.pdf.marcados].sort((a, b) => a - b) : null,
   };
 }
 
@@ -85,7 +92,9 @@ function mostrarResumoFormato() {
   $('resumoFormato').innerHTML =
     `Etiqueta <b>${f.largura_mm} × ${f.altura_mm} mm</b> · ` +
     `<span class="colunas">${colunas}</span> · ` +
-    `papel de <b>${f.largura_total_mm} mm</b> de largura` + origem;
+    `papel de <b>${f.largura_total_mm} mm</b> de largura` + origem +
+    (f.margem_seguranca_mm
+      ? ` · margem de ${String(f.margem_seguranca_mm).replace('.', ',')} mm no PDF` : '');
   $('densidade').value = String(f.dpmm);
   $('btApagarFormato').disabled = !!f.embutido;
   $('btApagarFormato').title = f.embutido
@@ -119,13 +128,23 @@ function agendarDesenho(atraso = 500) {
   temporizador = setTimeout(desenhar, atraso);
 }
 
+function limparPreview() {
+  $('preview').removeAttribute('src');
+  $('posicao').textContent = '—';
+  $('medida').textContent = '';
+  mostrarAvisos([]);
+}
+
 async function desenhar() {
   const zpl = $('zpl').value;
-  if (!zpl.trim()) {
-    $('preview').removeAttribute('src');
-    $('posicao').textContent = '—';
+  if (!estado.pdf && !zpl.trim()) {
+    limparPreview();
     $('contagem').textContent = '';
-    $('medida').textContent = '';
+    return;
+  }
+  if (estado.pdf && !estado.pdf.marcados.size) {
+    limparPreview();
+    $('contagem').textContent = 'nada marcado para imprimir';
     return;
   }
   try {
@@ -134,20 +153,145 @@ async function desenhar() {
     estado.indice = dados.indice;
     estado.ultimaGeometria = dados.geometria;
     $('preview').src = dados.imagem;
-    $('contagem').textContent =
-      `${dados.total} etiqueta${dados.total === 1 ? '' : 's'} no arquivo`;
+    $('contagem').textContent = estado.pdf
+      ? `${dados.total} de ${estado.pdf.recortes.length} marcada${dados.total === 1 ? '' : 's'} para imprimir`
+      : `${dados.total} etiqueta${dados.total === 1 ? '' : 's'} no arquivo`;
     $('posicao').textContent = estado.visao === 'folha'
       ? `folha ${dados.folha_atual + 1} de ${dados.folhas}`
       : `etiqueta ${dados.indice + 1} de ${dados.total}`;
     const g = dados.geometria;
-    $('medida').textContent =
+    let medida =
       `${g.largura_mm} × ${g.altura_mm} mm · ${g.largura_pontos} × ${g.altura_pontos} pontos` +
       ` · ${g.dpmm} dpmm` + (dados.motor === 'labelary' ? ' · desenhado pelo Labelary' : '');
+    if (dados.pdf) {
+      // Quanto o desenho do PDF cresceu ou encolheu para caber: é o número que
+      // diz se o código de barras ainda vai ler.
+      const r = dados.pdf.recorte;
+      medida += ` · PDF de ${String(r.largura_mm).replace('.', ',')} × ` +
+        `${String(r.altura_mm).replace('.', ',')} mm a ${Math.round(dados.pdf.escala * 100)}%` +
+        (dados.pdf.girada ? ', girado 90°' : '');
+    }
+    $('medida').textContent = medida;
     mostrarAvisos(dados.avisos);
     aplicarZoom();
   } catch (erro) {
     recado(erro.message, 'erro');
+    // O programa foi reaberto e o PDF não está mais na memória do servidor.
+    if (estado.pdf && /não está mais aberto/.test(erro.message)) fecharPdf();
   }
+}
+
+/* ------------------------------------------------------------------- PDF */
+
+function lerComoDataUrl(arquivo) {
+  return new Promise((resolver, falhar) => {
+    const leitor = new FileReader();
+    leitor.onload = () => resolver(String(leitor.result));
+    leitor.onerror = () => falhar(new Error(`não consegui ler ${arquivo.name}`));
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+const ehPdf = (arquivo) =>
+  arquivo.type === 'application/pdf' || /\.pdf$/i.test(arquivo.name);
+
+/** Manda o PDF ao servidor, que acha as etiquetas dentro da folha. */
+async function abrirPdf(arquivo) {
+  try {
+    recado(`Lendo ${arquivo.name}…`);
+    const conteudo = await lerComoDataUrl(arquivo);
+    const dados = await apiJson('/api/pdf/abrir', {
+      nome: arquivo.name, conteudo_base64: conteudo,
+    });
+    entrarModoPdf(dados);
+    const marcadas = dados.sugeridos.length;
+    const fora = dados.recortes.length - marcadas;
+    recado(`${arquivo.name}: ${marcadas} etiqueta${marcadas === 1 ? '' : 's'} encontrada` +
+           `${marcadas === 1 ? '' : 's'}` +
+           (fora ? ` · ${fora} página${fora === 1 ? '' : 's'} sem etiqueta deixada${fora === 1 ? '' : 's'} de fora` : ''),
+           'ok');
+  } catch (erro) {
+    recado(erro.message, 'erro');
+  }
+}
+
+function entrarModoPdf(dados) {
+  if (!estado.pdf) estado.formatoAntesDoPdf = $('formato').value;
+  estado.pdf = { ...dados, marcados: new Set(dados.sugeridos) };
+  estado.indice = 0;
+  document.body.classList.add('modo-pdf');
+  $('painelPdf').hidden = false;
+  $('tituloEditor').textContent = 'Etiqueta em PDF';
+  $('pdfNome').textContent = dados.nome;
+  $('pdfResumo').textContent =
+    `${dados.paginas} página${dados.paginas === 1 ? '' : 's'} · ` +
+    `${dados.recortes.length} recorte${dados.recortes.length === 1 ? '' : 's'} encontrado` +
+    `${dados.recortes.length === 1 ? '' : 's'}`;
+  // O Labelary só entende ZPL.
+  $('motor').value = 'local';
+  $('motor').disabled = true;
+
+  // Cada modo tem o seu formato: o do PDF é lembrado à parte.
+  const preferido = estado.preferencias.formato_pdf_id || estado.formatoPdfPadrao;
+  if (estado.formatos.some((f) => f.id === preferido)) {
+    $('formato').value = preferido;
+    mostrarResumoFormato();
+  }
+  montarListaRecortes();
+  desenhar();
+}
+
+function montarListaRecortes() {
+  const lista = $('listaRecortes');
+  lista.innerHTML = '';
+  for (const r of estado.pdf.recortes) {
+    const item = document.createElement('li');
+    const rotulo = document.createElement('label');
+    const caixa = document.createElement('input');
+    caixa.type = 'checkbox';
+    caixa.checked = estado.pdf.marcados.has(r.indice);
+    caixa.addEventListener('change', () => {
+      if (caixa.checked) estado.pdf.marcados.add(r.indice);
+      else estado.pdf.marcados.delete(r.indice);
+      estado.indice = 0;
+      desenhar();
+    });
+    const texto = document.createElement('span');
+    texto.textContent = r.descricao;
+    if (!r.sugerido) texto.className = 'fora';
+    rotulo.append(caixa, texto);
+    item.appendChild(rotulo);
+    lista.appendChild(item);
+  }
+}
+
+function fecharPdf() {
+  estado.pdf = null;
+  estado.indice = 0;
+  document.body.classList.remove('modo-pdf');
+  $('painelPdf').hidden = true;
+  $('tituloEditor').textContent = 'Código ZPL';
+  $('motor').disabled = false;
+  if (estado.formatoAntesDoPdf && estado.formatos.some((f) => f.id === estado.formatoAntesDoPdf)) {
+    $('formato').value = estado.formatoAntesDoPdf;
+    mostrarResumoFormato();
+  }
+  desenhar();
+}
+
+/** Arquivo aberto pelo botão ou arrastado: PDF vai para o servidor, o resto é ZPL. */
+function abrirArquivo(arquivo) {
+  if (ehPdf(arquivo)) { abrirPdf(arquivo); return; }
+  const leitor = new FileReader();
+  leitor.onload = () => {
+    if (estado.pdf) fecharPdf();
+    $('zpl').value = String(leitor.result);
+    localStorage.setItem('eleva.zpl', $('zpl').value);
+    estado.indice = 0;
+    desenhar();
+    recado(`${arquivo.name} carregado.`, 'ok');
+  };
+  leitor.readAsText(arquivo, 'utf-8');
 }
 
 function mostrarAvisos(lista) {
@@ -400,12 +544,15 @@ function aplicarPreferenciaDaImpressora() {
 
 /** Avisa o servidor do que foi escolhido, para a próxima abertura já vir assim. */
 async function lembrarEscolha() {
+  const formato = formatoAtual() ? formatoAtual().id : null;
   try {
     estado.preferencias = await apiJson('/api/preferencias', {
       impressora: $('impressora').value || null,
       modo: $('modo').value,
       gap_mm: Number($('gap').value) || 0,
-      formato_id: formatoAtual() ? formatoAtual().id : null,
+      // Com PDF aberto, a escolha vale para os próximos PDFs, não para o ZPL.
+      formato_id: estado.pdf ? null : formato,
+      formato_pdf_id: estado.pdf ? formato : null,
     });
   } catch { /* preferência é conveniência: falhar aqui não atrapalha imprimir */ }
 }
@@ -439,6 +586,7 @@ function abrirDialogoFormato(modo) {
   $('fDpmm').value = String(modo === 'editar' ? base.dpmm : 8);
   $('fMargem').value = modo === 'editar' ? base.margem_mm : 0;
   $('fColunasNoZpl').checked = modo === 'editar' ? !!base.colunas_no_zpl : false;
+  $('fMargemPdf').value = modo === 'editar' ? (base.margem_seguranca_mm || 0) : 0;
   $('erroFormato').hidden = true;
   atualizarNotaFormato();
   dialogo.showModal();
@@ -474,6 +622,7 @@ async function salvarFormato() {
     espaco_colunas_mm: Number($('fEspaco').value) || 0,
     margem_mm: Number($('fMargem').value) || 0,
     colunas_no_zpl: $('fColunasNoZpl').checked,
+    margem_seguranca_mm: Number($('fMargemPdf').value) || 0,
   };
   try {
     const dados = await apiJson('/api/formatos', corpo);
@@ -536,6 +685,7 @@ async function iniciar() {
   }
 
   preencherFormatos(dados.formatos, dados.formato_padrao);
+  estado.formatoPdfPadrao = dados.formato_pdf_padrao;
 
   const select = $('impressora');
   select.innerHTML = '';
@@ -595,19 +745,35 @@ function ligarEventos() {
   });
 
   $('btAbrir').addEventListener('click', () => $('arquivoZpl').click());
-  $('arquivoZpl').addEventListener('change', (evento) => {
-    const arquivo = evento.target.files[0];
-    if (!arquivo) return;
-    const leitor = new FileReader();
-    leitor.onload = () => {
-      $('zpl').value = String(leitor.result);
-      localStorage.setItem('eleva.zpl', $('zpl').value);
-      estado.indice = 0;
-      desenhar();
-      recado(`${arquivo.name} carregado.`, 'ok');
-    };
-    leitor.readAsText(arquivo, 'utf-8');
-    evento.target.value = '';
+  $('btAbrirPdf').addEventListener('click', () => $('arquivoPdf').click());
+  for (const id of ['arquivoZpl', 'arquivoPdf']) {
+    $(id).addEventListener('change', (evento) => {
+      const arquivo = evento.target.files[0];
+      if (arquivo) abrirArquivo(arquivo);
+      evento.target.value = '';
+    });
+  }
+  $('btFecharPdf').addEventListener('click', fecharPdf);
+
+  // Arrastar o arquivo para a janela. Sem o preventDefault, soltar um PDF faz a
+  // janela *navegar* até ele e o programa some da frente.
+  let arrastando = 0;
+  document.addEventListener('dragenter', (evento) => {
+    evento.preventDefault();
+    arrastando += 1;
+    document.body.classList.add('soltando');
+  });
+  document.addEventListener('dragleave', () => {
+    arrastando = Math.max(0, arrastando - 1);
+    if (!arrastando) document.body.classList.remove('soltando');
+  });
+  document.addEventListener('dragover', (evento) => evento.preventDefault());
+  document.addEventListener('drop', (evento) => {
+    evento.preventDefault();
+    arrastando = 0;
+    document.body.classList.remove('soltando');
+    const arquivo = evento.dataTransfer && evento.dataTransfer.files[0];
+    if (arquivo) abrirArquivo(arquivo);
   });
 
   $('btImagem').addEventListener('click', () => $('arquivoImagem').click());

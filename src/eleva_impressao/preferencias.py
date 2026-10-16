@@ -32,6 +32,9 @@ class Impressora:
 @dataclass(slots=True)
 class Preferencias:
     formato_id: str = ""
+    # O formato usado com PDF fica à parte: abrir um PDF não pode trocar o
+    # formato do ZPL de amanhã, e vice-versa.
+    formato_pdf_id: str = ""
     impressora: str = ""
     impressoras: dict[str, Impressora] = field(default_factory=dict)
 
@@ -73,6 +76,7 @@ def carregar() -> Preferencias:
             )
     return Preferencias(
         formato_id=str(bruto.get("formato_id", "")),
+        formato_pdf_id=str(bruto.get("formato_pdf_id", "")),
         impressora=str(bruto.get("impressora", "")),
         impressoras=impressoras,
     )
@@ -92,11 +96,14 @@ def lembrar(
     modo: str = "",
     gap_mm: float | None = None,
     formato_id: str = "",
+    formato_pdf_id: str = "",
 ) -> Preferencias:
     """Guarda o que veio; o que não veio fica como estava."""
     atual = carregar()
     if formato_id:
         atual.formato_id = formato_id
+    if formato_pdf_id:
+        atual.formato_pdf_id = formato_pdf_id
     if impressora:
         atual.impressora = impressora
         anterior = atual.da_impressora(impressora)

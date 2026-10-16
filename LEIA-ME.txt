@@ -34,13 +34,44 @@ COMO USAR
 2. Abra o programa. No canto superior direito tem de aparecer a bolinha
    VERDE com o nome da impressora. Se aparecer vermelha, a impressora
    nao foi encontrada.
-3. Cole o codigo da etiqueta (ZPL) na caixa da esquerda.
+3. Cole o codigo da etiqueta (ZPL) na caixa da esquerda. Se a etiqueta
+   veio em PDF, veja "ETIQUETA EM PDF" logo abaixo.
 4. Escolha o FORMATO:
      - "Mercado Livre 100 x 150 mm"  -> etiqueta grande de envio
      - "Mercado Livre - par ja no ZPL - 40 x 25 mm" -> etiqueta pequena,
        aquela que sai duas lado a lado
 5. Confira o desenho a direita: e exatamente o que vai sair no papel.
 6. Clique em IMPRIMIR.
+
+
+ETIQUETA EM PDF (O NOVO JEITO DO MERCADO LIVRE)
+-----------------------------------------------
+
+O Mercado Livre passou a mandar a etiqueta de uma coluna em PDF: uma
+folha A4 com a etiqueta no canto e, na segunda pagina, a lista do que
+vai no pacote. Nao precisa transformar em ZPL.
+
+1. Clique em "Abrir PDF..." e escolha o arquivo baixado do Mercado
+   Livre. (Ou arraste o PDF para dentro da janela.)
+2. O programa acha a etiqueta dentro da folha sozinho e troca o formato
+   para "Mercado Livre PDF - 100 x 150 mm".
+3. Na lista "O que imprimir":
+     - a etiqueta ja vem MARCADA;
+     - a pagina da lista de conteudo vem DESMARCADA. Marque so se quiser
+       imprimir ela tambem.
+4. Confira o desenho a direita. Embaixo dele aparece o tamanho da
+   etiqueta do PDF e a porcentagem (perto de 100% e o normal).
+5. Clique em IMPRIMIR.
+
+O desenho e encaixado no tamanho da etiqueta SEM esticar (esticar
+estraga o codigo de barras) e com 1,5 mm de folga na beira, para nada
+sair cortado. Para mudar essa folga: "Editar" no formato, campo
+"Margem de seguranca ao imprimir PDF".
+
+Para voltar a colar ZPL, clique em "Fechar PDF".
+
+O PDF nao fica salvo no computador: fechou o programa, abra o arquivo
+de novo.
 
 
 O BOTAO LARANJA "AJUSTAR AUTOMATICO"

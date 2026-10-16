@@ -39,6 +39,7 @@ uv run pyinstaller eleva-impressao-unico.spec    # .exe único
 | Preciso de… | Vá para |
 |---|---|
 | desenhar ZPL → bitmap | `render.py` |
+| etiqueta em PDF → bitmap | `pdf.py` |
 | código de barras e QR | `barras.py` |
 | formatos de etiqueta | `formatos.py` |
 | ajuste automático do texto | `ajuste.py` |
@@ -77,6 +78,13 @@ Todos em `src/eleva_impressao/`.
 - **No `BITMAP` do TSPL, bit 0 é que imprime.** É o inverso do `^GF` do ZPL.
   Inverter por engano não dá erro nenhum: sai uma etiqueta inteiramente preta e
   gasta o rolo. Há teste fixando as duas convenções (`test_impressao_app.py`).
+- **PDF: escala igual nos dois eixos, e linha fina não pode sumir.** Esticar um
+  eixo só muda a largura das barras. E a moldura da etiqueta do Mercado Livre é
+  um anel *preenchido* de 0,3 pt — menos de um ponto do cabeçote: conforme a
+  escala, vira cinza claro e o corte de 128 a apaga (largura mínima de traço não
+  resolve, não é traço). `pdf._resgatar_linhas_finas` escurece só o ponto que
+  sumiria por inteiro; borda de barra tem vizinho preto e não muda. O PDFium não
+  é thread-safe: toda chamada passa por `pdf._TRAVA`.
 - **Programa de janela no Windows não tem `stdout`.** Empacotado sem console,
   `sys.stdout` é `None`: o formatador do uvicorn chama `.isatty()` e o servidor
   morre antes de subir (daí `log_config=None`), e `subprocess.Popen` sem

@@ -66,6 +66,7 @@ Vêm prontos:
 | Formato | Etiqueta | Colunas | Papel |
 |---|---|---|---|
 | **Mercado Livre 100 × 150 mm** *(padrão)* | 100 × 150 mm | 1 | 100 mm |
+| **Mercado Livre PDF · 100 × 150 mm** *(padrão do PDF)* | 100 × 150 mm, margem de 1,5 mm no PDF | 1 | 100 mm |
 | Mercado Livre 2 colunas | 41,9 × 25,4 mm | 2, **já no ZPL** | 83,8 mm |
 | Duas colunas 40 × 25 mm | 40 × 25 mm | 2, montadas aqui | 82 mm |
 | 100 × 50 mm | 100 × 50 mm | 1 | 100 mm |
@@ -156,6 +157,70 @@ O resultado é sugestão, não sentença: **Desfazer ajuste** devolve o ZPL ante
 
 ---
 
+## Etiqueta em PDF
+
+Em outubro de 2026 o Mercado Livre passou a entregar a etiqueta de uma coluna em
+**PDF**, não em ZPL: uma folha **A4 deitada** com a etiqueta (90,2 × 148,7 mm,
+com moldura) no canto esquerdo e o resto em branco, seguida de uma página A4 em
+pé com a lista de conteúdo do pedido. Mandada como veio, a térmica imprime a A4
+inteira encolhida dentro de 100 × 150 mm — a etiqueta a um terço do tamanho.
+
+**Abrir PDF…** (ou arrastar o arquivo para a janela) faz o resto, em `pdf.py`:
+
+1. **Acha a etiqueta pela moldura.** Moldura é um retângulo desenhado de 25 a
+   220 mm de lado **com tinta nos quatro lados** — um fundo branco também é um
+   retângulo, e não conta. Moldura dentro de moldura é enfeite. Página sem
+   moldura vira um recorte do que tem tinta nela. Se alguma página tem moldura,
+   as que não têm (a lista de conteúdo) aparecem **desmarcadas**.
+2. **Encaixa sem distorcer**: escala igual nos dois eixos, centralizado, dentro
+   da margem de segurança do formato. Gira 90° só se couber ≥ 10% maior deitado.
+3. **Rasteriza do vetor direto na densidade da impressora**, com o PDFium (o
+   motor de PDF do Chrome, via `pypdfium2`, licença BSD/Apache, sem rede).
+
+Vem de fábrica o formato **Mercado Livre PDF · 100 × 150 mm**: o mesmo rolo do
+ZPL, com **1,5 mm de margem de segurança** (campo novo do formato, que só vale
+para PDF). Na etiqueta real a escala fica em **98%**. A tela lembra o formato
+do PDF à parte do formato do ZPL (`formato_pdf_id` em `preferencias.json`).
+
+O PDF fica **só em memória** — traz nome e endereço do comprador.
+
+### Medido na etiqueta real
+
+| O que | Resultado |
+|---|---|
+| Etiqueta achada | 91,2 × 149,7 mm (moldura + 0,5 mm de folga) |
+| Lista de conteúdo | achada e deixada de fora |
+| Código de barras (imagem 900 px, módulo 8 px, 60 mm) | barra fina de 4–5 pontos, as largas 8–9 / 12–13 / 17 — **lido de volta** (`48265574814`) em 40 de 40 passadas, a partir dos bytes TSPL que iriam pelo cabo |
+| QR (25 × 25 módulos) | **0 de 625** módulos diferentes do original |
+| Desenhar uma etiqueta | ~25 ms |
+
+O "lido de volta" é um leitor de Code 128 dos testes (`tests/leitor_code128.py`):
+comparar pixel não diz se o código lê; ler diz.
+
+### A armadilha que este caminho já pagou
+
+**A linha de cima da moldura sumia.** A moldura do Mercado Livre não é traço, é
+um anel **preenchido** de 0,3 pt — menos de um ponto do cabeçote. Conforme a
+escala, ela cai entre duas linhas de pontos, a suavização a espalha num cinza
+de 145–155 e o corte de 128 a apaga. Sem suavização o PDFium a descarta do
+mesmo jeito, e "largura mínima de traço" não adianta porque não é traço.
+
+A correção (`_resgatar_linhas_finas`) é a "largura mínima de linha" dos drivers
+de impressão, feita no bitmap: ponto com ≥ 20% de tinta que **sumiria por
+inteiro** (nenhum vizinho que já sai preto, e branco ao lado) é escurecido.
+Borda de barra e de letra sempre tem vizinho preto — então barras, QR e texto
+saem idênticos. Há teste nas duas direções: a moldura aparece em sete escalas
+diferentes, e desligando o resgate quatro delas perdem a linha.
+
+### O que ainda não faz
+
+- Moldura desenhada como **quatro linhas soltas** não é reconhecida como uma
+  etiqueta só; a página inteira com tinta vira o recorte (para uma etiqueta por
+  folha, dá no mesmo).
+- O ajuste automático é de ZPL: o PDF não tem campos para reposicionar.
+
+---
+
 ## Impressão: três caminhos, porque a impressora é um clone
 
 A KP-IM604 vem com um driver chamado `LABEL`, que é **GDI** — espera receber uma
@@ -227,6 +292,7 @@ certo, a densidade configurada não é a da impressora).
 | Preciso de… | Vá para |
 |---|---|
 | ZPL → bitmap, comandos, fontes | `impressao/render.py` |
+| PDF → bitmap, achar a etiqueta na folha | `impressao/pdf.py` |
 | Code 128 / 39 / 2 de 5 / EAN / QR | `impressao/barras.py` |
 | imagem → `^GF` e de volta | `impressao/graficos.py` |
 | tamanhos de etiqueta e colunas | `impressao/formatos.py` |

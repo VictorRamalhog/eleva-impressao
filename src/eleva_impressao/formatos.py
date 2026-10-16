@@ -51,6 +51,11 @@ class Formato:
     # Desenhar um ZPL do segundo tipo com a régua do primeiro corta a coluna da
     # direita fora — e o programa avisa quando reconhece o sintoma.
     colunas_no_zpl: bool = False
+    # Borda que o PDF não ocupa ao ser encaixado na etiqueta. Só vale para PDF:
+    # o ZPL já diz onde cada coisa vai. Existe porque o desenho do Mercado Livre
+    # vai quase até a beira, e a térmica falha nos primeiros e últimos décimos
+    # de milímetro quando o rolo avança um pouco torto.
+    margem_seguranca_mm: float = 0.0
     embutido: bool = False  # embutido não se apaga; pode ser duplicado e editado
 
     # -- medidas derivadas ------------------------------------------------- #
@@ -99,7 +104,10 @@ class Formato:
         coluna = "1 coluna" if self.colunas == 1 else f"{self.colunas} colunas"
         if self.colunas_no_zpl:
             coluna += " no próprio ZPL"
-        return f"{self.largura_mm:g} × {self.altura_mm:g} mm · {coluna}"
+        descricao = f"{self.largura_mm:g} × {self.altura_mm:g} mm · {coluna}"
+        if self.margem_seguranca_mm:
+            descricao += f" · margem de {self.margem_seguranca_mm:g} mm no PDF"
+        return descricao
 
     def validar(self) -> None:
         if not self.nome.strip():
@@ -112,8 +120,14 @@ class Formato:
             )
         if self.colunas < 1 or self.colunas > 2:
             raise FormatoInvalido("por enquanto só 1 ou 2 colunas")
-        if self.espaco_colunas_mm < 0 or self.margem_mm < 0:
+        if self.espaco_colunas_mm < 0 or self.margem_mm < 0 or self.margem_seguranca_mm < 0:
             raise FormatoInvalido("espaço e margem não podem ser negativos")
+        if self.margem_seguranca_mm > min(self.largura_mm, self.altura_mm) / 4:
+            raise FormatoInvalido(
+                f"margem de segurança de {self.margem_seguranca_mm:g} mm come mais da "
+                "metade da etiqueta; use no máximo "
+                f"{min(self.largura_mm, self.altura_mm) / 4:g} mm"
+            )
         if self.colunas_no_zpl and self.colunas < 2:
             raise FormatoInvalido(
                 "'o ZPL já traz as colunas' só faz sentido com mais de uma coluna"
@@ -136,6 +150,12 @@ class Formato:
 # Mercado Livre é 100 × 150 mm, uma coluna.
 EMBUTIDOS: tuple[Formato, ...] = (
     Formato("ml-100x150", "Mercado Livre 100 × 150 mm", 100, 150, embutido=True),
+    # O mesmo rolo, para a etiqueta que o Mercado Livre agora entrega em PDF: a
+    # etiqueta vem desenhada com ≈ 90 × 149 mm dentro de uma A4 e é encaixada
+    # nos 100 × 150 sem distorcer. A margem afasta o desenho da beira — sem ela
+    # a moldura encosta na borda de cima e de baixo do papel.
+    Formato("ml-pdf-100x150", "Mercado Livre PDF · 100 × 150 mm", 100, 150,
+            margem_seguranca_mm=1.5, embutido=True),
     # Os dois formatos abaixo têm a mesma medida de propósito: o rolo é o mesmo
     # (40 × 25 mm, duas colunas). O que muda é **quem monta o par** — e é só
     # isso que os nomes precisam dizer.
@@ -152,6 +172,7 @@ EMBUTIDOS: tuple[Formato, ...] = (
     Formato("etq-40x25", "40 × 25 mm (uma coluna)", 40, 25, embutido=True),
 )
 PADRAO = EMBUTIDOS[0].id
+PADRAO_PDF = EMBUTIDOS[1].id
 
 
 def dir_dados() -> Path:
@@ -193,6 +214,7 @@ def _do_dicionario(dados: dict) -> Formato:
         espaco_colunas_mm=float(dados.get("espaco_colunas_mm", 2.0)),
         margem_mm=float(dados.get("margem_mm", 0.0)),
         colunas_no_zpl=bool(dados.get("colunas_no_zpl", False)),
+        margem_seguranca_mm=float(dados.get("margem_seguranca_mm", 0.0)),
         embutido=bool(dados.get("embutido", False)),
     )
 
@@ -310,6 +332,7 @@ __all__ = [
     "EMBUTIDOS",
     "LARGURA_MAXIMA_MM",
     "PADRAO",
+    "PADRAO_PDF",
     "Formato",
     "FormatoInvalido",
     "apagar",

@@ -14,7 +14,7 @@
     <img src="/logo.png" alt="Eleva" class="logo">
     <div>
       <h1>Impressão</h1>
-      <p class="sub">Etiquetas ZPL — visualizar, ajustar e imprimir</p>
+      <p class="sub">Etiquetas ZPL e PDF — visualizar, ajustar e imprimir</p>
     </div>
   </div>
 
@@ -29,23 +29,43 @@
   <!-- ------------------------------------------------------------------ -->
   <section class="coluna-editor">
     <div class="barra">
-      <strong>Código ZPL</strong>
+      <strong id="tituloEditor">Código ZPL</strong>
       <span class="dica" id="contagem"></span>
     </div>
 
     <textarea id="zpl" spellcheck="false" autocomplete="off"
-              placeholder="Cole aqui o ZPL da etiqueta, ou abra um arquivo .zpl"></textarea>
+              placeholder="Cole aqui o ZPL da etiqueta, abra um arquivo .zpl ou .pdf — ou arraste o arquivo para cá"></textarea>
+
+    <!-- Aparece no lugar do editor quando um PDF está aberto. -->
+    <div class="painel-pdf" id="painelPdf" hidden>
+      <div class="pdf-arquivo">
+        <div class="pdf-nome">
+          <strong id="pdfNome"></strong>
+          <span class="dica" id="pdfResumo"></span>
+        </div>
+        <button id="btFecharPdf" class="botao secundario pequeno"
+                title="Fecha o PDF e volta para o editor de ZPL">Fechar PDF</button>
+      </div>
+      <p class="nota">O PDF não precisa virar ZPL: cada etiqueta é desenhada direto no
+        tamanho do formato escolhido, sem distorcer, e vai para a impressora exatamente
+        como aparece na prévia.</p>
+      <div class="grupo-titulo">O que imprimir</div>
+      <ul class="lista-recortes" id="listaRecortes"></ul>
+    </div>
 
     <div class="acoes">
       <button id="btRedesenhar" class="botao">Redesenhar</button>
       <button id="btAjustar" class="botao acento"
               title="Reposiciona e redimensiona os campos para caberem na etiqueta. Não altera nome, SKU nem código de barras.">Ajustar automático</button>
       <button id="btDesfazer" class="botao secundario" hidden>Desfazer ajuste</button>
+      <button id="btAbrirPdf" class="botao"
+              title="Etiqueta do Mercado Livre em PDF: o programa acha a etiqueta na folha e encaixa no formato">Abrir PDF…</button>
       <button id="btAbrir" class="botao secundario">Abrir arquivo…</button>
-      <button id="btImagem" class="botao secundario">Adicionar imagem…</button>
-      <button id="btExemplo" class="botao secundario">Exemplo</button>
-      <button id="btLimpar" class="botao secundario">Limpar</button>
-      <input type="file" id="arquivoZpl" accept=".zpl,.txt,.prn" hidden>
+      <button id="btImagem" class="botao secundario so-zpl">Adicionar imagem…</button>
+      <button id="btExemplo" class="botao secundario so-zpl">Exemplo</button>
+      <button id="btLimpar" class="botao secundario so-zpl">Limpar</button>
+      <input type="file" id="arquivoZpl" accept=".zpl,.txt,.prn,.pdf,application/pdf" hidden>
+      <input type="file" id="arquivoPdf" accept=".pdf,application/pdf" hidden>
       <input type="file" id="arquivoImagem" accept="image/*" hidden>
     </div>
 
@@ -226,6 +246,14 @@
         <input type="number" id="fMargem" min="0" max="20" step="0.5" value="0">
       </label>
     </div>
+
+    <label class="campo">
+      <span>Margem de segurança ao imprimir PDF (mm)</span>
+      <input type="number" id="fMargemPdf" min="0" max="10" step="0.5" value="0">
+    </label>
+    <p class="nota">Só vale para PDF: afasta o desenho da beira da etiqueta, onde a
+      térmica falha quando o rolo avança um pouco torto. O ZPL não usa — ele já diz
+      onde cada coisa vai.</p>
 
     <label class="campo caixa" id="linhaColunasNoZpl">
       <input type="checkbox" id="fColunasNoZpl">

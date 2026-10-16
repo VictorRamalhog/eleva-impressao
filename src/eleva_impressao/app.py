@@ -13,8 +13,11 @@ a divisão das colunas por cima da imagem, sem sujar o bitmap que vai imprimir.
 from __future__ import annotations
 
 import base64
+import binascii
 import io
 import sys
+import threading
+from collections import OrderedDict
 from dataclasses import replace
 from pathlib import Path
 
@@ -23,8 +26,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from PIL import Image
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
-from eleva_impressao import ajuste, formatos, graficos, preferencias, render, windows
+from eleva_impressao import ajuste, formatos, graficos, pdf, preferencias, render, windows
 
 VERSAO = "1.0"
 TITULO = "Eleva Impressão"
@@ -67,6 +71,12 @@ class Desenho(BaseModel):
     colunas: int | None = None
     espaco_colunas_mm: float | None = None
     colunas_no_zpl: bool | None = None
+    # PDF aberto pela tela (o ``id`` que /api/pdf/abrir devolveu). Com ele, o
+    # campo ``zpl`` é ignorado e ``indice`` conta só as etiquetas marcadas.
+    pdf_id: str = ""
+    # Quais recortes do PDF entram, pelos índices de /api/pdf/abrir. ``None``
+    # usa os sugeridos (as etiquetas com moldura, sem a lista de conteúdo).
+    pdf_recortes: list[int] | None = None
 
 
 class PedidoImpressao(Desenho):
@@ -91,6 +101,7 @@ class FormatoEntrada(BaseModel):
     espaco_colunas_mm: float = 2.0
     margem_mm: float = 0.0
     colunas_no_zpl: bool = False
+    margem_seguranca_mm: float = 0.0
 
 
 class PreferenciaEntrada(BaseModel):
@@ -98,6 +109,12 @@ class PreferenciaEntrada(BaseModel):
     modo: str | None = None
     gap_mm: float | None = None
     formato_id: str | None = None
+    formato_pdf_id: str | None = None
+
+
+class PdfEntrada(BaseModel):
+    nome: str = ""
+    conteudo_base64: str
 
 
 class ImagemEntrada(BaseModel):
@@ -258,10 +275,101 @@ def _folhas(zpl: str, formato: formatos.Formato, *, rotacao: int = 0,
     if formato.colunas_no_zpl:
         # O arquivo já vem com a folha montada: compor de novo duplicaria tudo.
         return imagens, avisos
+    return _montar(imagens, formato), avisos
+
+
+def _montar(imagens: list[Image.Image], formato: formatos.Formato) -> list[Image.Image]:
     return render.compor(
         imagens, colunas=formato.colunas,
         espaco_pontos=formato.espaco_pontos, margem_pontos=formato.margem_pontos,
-    ), avisos
+    )
+
+
+# --------------------------------------------------------------------------- #
+# PDF
+# --------------------------------------------------------------------------- #
+
+# Os PDFs abertos ficam em memória, nunca em disco: a etiqueta traz nome e
+# endereço do comprador. Guarda os últimos, para a tela redesenhar sem mandar o
+# arquivo de novo a cada clique.
+_PDFS: OrderedDict[str, pdf.Documento] = OrderedDict()
+_PDFS_GUARDADOS = 8
+_PDFS_TRAVA = threading.Lock()
+
+
+def _guardar_pdf(documento: pdf.Documento) -> None:
+    with _PDFS_TRAVA:
+        _PDFS[documento.id] = documento
+        _PDFS.move_to_end(documento.id)
+        while len(_PDFS) > _PDFS_GUARDADOS:
+            _PDFS.popitem(last=False)
+
+
+def _pdf_do_pedido(pedido: Desenho) -> pdf.Documento:
+    with _PDFS_TRAVA:
+        documento = _PDFS.get(pedido.pdf_id)
+    if documento is None:
+        # O programa foi reaberto e a tela ainda lembra do PDF anterior.
+        raise HTTPException(410, "o PDF não está mais aberto — abra o arquivo de novo")
+    return documento
+
+
+def _selecao_pdf(documento: pdf.Documento, pedido: Desenho) -> list[int]:
+    """Os recortes que entram, na ordem do arquivo."""
+    if pedido.pdf_recortes is None:
+        selecao = documento.sugeridos()
+    else:
+        validos = range(len(documento.recortes))
+        selecao = sorted({i for i in pedido.pdf_recortes if i in validos})
+    if not selecao:
+        raise HTTPException(400, "nenhuma etiqueta do PDF está marcada para imprimir")
+    return selecao
+
+
+def _desenhar_pdf(
+    documento: pdf.Documento, recorte: int, formato: formatos.Formato, *,
+    rotacao: int = 0, bitonal: bool = False,
+) -> pdf.Resultado:
+    """Uma etiqueta do PDF, na tela de desenho do formato — como o ZPL."""
+    return pdf.desenhar(
+        documento, recorte,
+        largura_mm=formato.largura_desenho_mm, altura_mm=formato.altura_mm,
+        dpmm=formato.dpmm, margem_mm=formato.margem_seguranca_mm,
+        rotacao=rotacao, bitonal=bitonal,
+    )
+
+
+def _folhas_pdf(
+    documento: pdf.Documento, selecao: list[int], formato: formatos.Formato, *,
+    rotacao: int = 0, bitonal: bool = False,
+) -> tuple[list[Image.Image], list[str]]:
+    imagens: list[Image.Image] = []
+    avisos: list[str] = []
+    for recorte in selecao:
+        resultado = _desenhar_pdf(
+            documento, recorte, formato, rotacao=rotacao, bitonal=bitonal
+        )
+        imagens.append(resultado.imagem)
+        avisos += [a for a in resultado.avisos if a not in avisos]
+    if formato.colunas_no_zpl:
+        return imagens, avisos
+    return _montar(imagens, formato), avisos
+
+
+def _zpl_de_folhas(folhas: list[Image.Image], copias: int) -> str:
+    """O bitmap de cada folha como ``^GF`` — o PDF no modo "ZPL cru".
+
+    Não é tradução do PDF para comandos: é o mesmo bitmap da prévia, embrulhado
+    em ZPL para o firmware que só fala ZPL.
+    """
+    partes = []
+    for folha in folhas:
+        preto_e_branco = folha.point(lambda v: 0 if v < 128 else 255, mode="L")
+        partes.append(
+            f"^XA^PW{folha.width}^LL{folha.height}^LH0,0"
+            f"^FO0,0{graficos.para_gf(preto_e_branco)}^FS^PQ{max(1, copias)}^XZ"
+        )
+    return "\n".join(partes)
 
 
 # --------------------------------------------------------------------------- #
@@ -306,6 +414,7 @@ def criar_app() -> FastAPI:
             "versao": VERSAO,
             "formatos": [f.dicionario() for f in formatos.carregar()],
             "formato_padrao": formatos.PADRAO,
+            "formato_pdf_padrao": formatos.PADRAO_PDF,
             "impressoras": impressoras,
             "erro_impressora": erro_impressora,
             "modos": [m.value for m in windows.Modo],
@@ -345,8 +454,25 @@ def criar_app() -> FastAPI:
 
     # -- desenho ----------------------------------------------------------- #
 
+    @app.post("/api/pdf/abrir")
+    def abrir_pdf(entrada: PdfEntrada) -> dict:
+        """Recebe o PDF da tela, acha as etiquetas e guarda em memória."""
+        try:
+            dados = base64.b64decode(entrada.conteudo_base64.split(",")[-1], validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise HTTPException(400, "o arquivo chegou corrompido; tente abrir de novo") from exc
+        try:
+            documento = pdf.abrir(dados, entrada.nome)
+        except pdf.PdfInvalido as exc:
+            raise HTTPException(400, str(exc)) from exc
+        _guardar_pdf(documento)
+        return documento.dicionario()
+
     @app.post("/api/preview")
     async def preview(pedido: Desenho) -> JSONResponse:
+        if pedido.pdf_id:
+            # Desenhar PDF é trabalho de CPU: fora do laço de eventos.
+            return JSONResponse(await run_in_threadpool(_preview_pdf, pedido))
         zpl = pedido.zpl or ""
         if not zpl.strip():
             raise HTTPException(400, "não há ZPL para desenhar")
@@ -400,6 +526,10 @@ def criar_app() -> FastAPI:
     @app.post("/api/ajustar")
     def ajustar(pedido: Desenho) -> dict:
         """Reposiciona os campos para caberem na etiqueta, sem tocar nos dados."""
+        if pedido.pdf_id:
+            raise HTTPException(
+                400, "o ajuste automático é para ZPL — o PDF já é encaixado sozinho"
+            )
         formato = _formato_do_pedido(pedido)
         try:
             resultado = ajuste.ajustar(pedido.zpl, formato)
@@ -415,12 +545,20 @@ def criar_app() -> FastAPI:
     @app.post("/api/png")
     def baixar_png(pedido: Desenho) -> Response:
         formato = _formato_do_pedido(pedido)
-        resultado = _desenhar_uma(
-            pedido.zpl, formato, pedido.indice, rotacao=pedido.rotacao,
-            bitonal=pedido.qualidade == "bitonal",
-        )
+        bitonal = pedido.qualidade == "bitonal"
+        if pedido.pdf_id:
+            documento = _pdf_do_pedido(pedido)
+            selecao = _selecao_pdf(documento, pedido)
+            recorte = selecao[max(0, min(pedido.indice, len(selecao) - 1))]
+            imagem = _desenhar_pdf(
+                documento, recorte, formato, rotacao=pedido.rotacao, bitonal=bitonal
+            ).imagem
+        else:
+            imagem = _desenhar_uma(
+                pedido.zpl, formato, pedido.indice, rotacao=pedido.rotacao, bitonal=bitonal
+            ).imagem
         return Response(
-            _png(resultado.imagem),
+            _png(imagem),
             media_type="image/png",
             headers={"Content-Disposition": 'attachment; filename="etiqueta.png"'},
         )
@@ -428,7 +566,14 @@ def criar_app() -> FastAPI:
     @app.post("/api/pdf")
     def baixar_pdf(pedido: Desenho) -> Response:
         formato = _formato_do_pedido(pedido)
-        folhas, _ = _folhas(pedido.zpl, formato, rotacao=pedido.rotacao, bitonal=True)
+        if pedido.pdf_id:
+            documento = _pdf_do_pedido(pedido)
+            folhas, _ = _folhas_pdf(
+                documento, _selecao_pdf(documento, pedido), formato,
+                rotacao=pedido.rotacao, bitonal=True,
+            )
+        else:
+            folhas, _ = _folhas(pedido.zpl, formato, rotacao=pedido.rotacao, bitonal=True)
         if not folhas:
             raise HTTPException(400, "não há etiqueta para gerar o PDF")
         buffer = io.BytesIO()
@@ -496,13 +641,14 @@ def criar_app() -> FastAPI:
             modo=entrada.modo or "",
             gap_mm=entrada.gap_mm,
             formato_id=entrada.formato_id or "",
+            formato_pdf_id=entrada.formato_pdf_id or "",
         ).dicionario()
 
     # -- impressão --------------------------------------------------------- #
 
     @app.post("/api/imprimir")
     def imprimir(pedido: PedidoImpressao) -> dict:
-        if not (pedido.zpl or "").strip():
+        if not pedido.pdf_id and not (pedido.zpl or "").strip():
             raise HTTPException(400, "não há ZPL para imprimir")
         formato = _formato_do_pedido(pedido)
         try:
@@ -516,6 +662,7 @@ def criar_app() -> FastAPI:
         formato = _formato_do_pedido(pedido)
         copia = pedido.model_copy(update={
             "zpl": zpl_de_teste(formato, pedido.modo),
+            "pdf_id": "",
             "apenas_esta": False,
             "copias": 1,
         })
@@ -576,7 +723,7 @@ def _executar_impressao(pedido: PedidoImpressao, formato: formatos.Formato) -> d
                 "precisa_confirmar": True,
             }
 
-    if modo is windows.Modo.ZPL:
+    if modo is windows.Modo.ZPL and not pedido.pdf_id:
         # Único caminho em que o ZPL vai inteiro, sem virar imagem.
         envio = windows.imprimir_zpl(
             pedido.zpl, impressora=pedido.impressora, copias=pedido.copias
@@ -585,18 +732,31 @@ def _executar_impressao(pedido: PedidoImpressao, formato: formatos.Formato) -> d
             preferencias.lembrar(impressora=envio.impressora, modo=modo.value)
         return {**envio.dicionario(), "avisos": [], "folhas": None}
 
-    zpl = pedido.zpl
-    if pedido.apenas_esta:
-        etiquetas = render.separar_etiquetas(zpl)
-        indice = max(0, min(pedido.indice, len(etiquetas) - 1))
-        zpl = etiquetas[indice]
-
     # Bitonal sempre: o cabeçote térmico só sabe queimar ou não queimar.
-    folhas, avisos = _folhas(zpl, formato, rotacao=pedido.rotacao, bitonal=True)
+    if pedido.pdf_id:
+        documento = _pdf_do_pedido(pedido)
+        selecao = _selecao_pdf(documento, pedido)
+        if pedido.apenas_esta:
+            selecao = [selecao[max(0, min(pedido.indice, len(selecao) - 1))]]
+        folhas, avisos = _folhas_pdf(
+            documento, selecao, formato, rotacao=pedido.rotacao, bitonal=True
+        )
+    else:
+        zpl = pedido.zpl
+        if pedido.apenas_esta:
+            etiquetas = render.separar_etiquetas(zpl)
+            indice = max(0, min(pedido.indice, len(etiquetas) - 1))
+            zpl = etiquetas[indice]
+        folhas, avisos = _folhas(zpl, formato, rotacao=pedido.rotacao, bitonal=True)
     if not folhas:
         raise HTTPException(400, "não há etiqueta para imprimir")
 
-    if modo is windows.Modo.TSPL:
+    if modo is windows.Modo.ZPL:
+        # PDF em impressora que só fala ZPL: o mesmo bitmap, dentro de ^GF.
+        envio = windows.imprimir_zpl(
+            _zpl_de_folhas(folhas, pedido.copias), impressora=pedido.impressora
+        )
+    elif modo is windows.Modo.TSPL:
         envio = windows.imprimir_tspl(
             folhas, impressora=pedido.impressora,
             largura_mm=formato.largura_total_mm, altura_mm=formato.altura_mm,
@@ -613,6 +773,46 @@ def _executar_impressao(pedido: PedidoImpressao, formato: formatos.Formato) -> d
             impressora=envio.impressora, modo=modo.value, gap_mm=pedido.gap_mm
         )
     return {**envio.dicionario(), "avisos": avisos, "folhas": len(folhas)}
+
+
+def _preview_pdf(pedido: Desenho) -> dict:
+    """A prévia do PDF — o mesmo ``pdf.desenhar`` que gera o papel."""
+    formato = _formato_do_pedido(pedido)
+    documento = _pdf_do_pedido(pedido)
+    selecao = _selecao_pdf(documento, pedido)
+    total = len(selecao)
+    indice = max(0, min(pedido.indice, total - 1))
+    bitonal = pedido.qualidade == "bitonal"
+    resultado = _desenhar_pdf(
+        documento, selecao[indice], formato, rotacao=pedido.rotacao, bitonal=bitonal
+    )
+    info = {
+        "escala": round(resultado.escala, 4),
+        "girada": resultado.girada,
+        "recorte": documento.recortes[selecao[indice]].dicionario(selecao[indice]),
+    }
+
+    if pedido.visao == "folha":
+        folhas, avisos = _folhas_pdf(
+            documento, selecao, formato, rotacao=pedido.rotacao, bitonal=bitonal
+        )
+        por_folha = 1 if formato.colunas_no_zpl else max(1, formato.colunas)
+        pagina = min(indice // por_folha, max(0, len(folhas) - 1))
+        imagem = folhas[pagina]
+        return {
+            "imagem": _base64_png(imagem), "total": total, "indice": indice,
+            "folhas": len(folhas), "folha_atual": pagina, "avisos": avisos,
+            "motor": "local", "geometria": _geometria(formato, imagem), "pdf": info,
+        }
+
+    return {
+        "imagem": _base64_png(resultado.imagem), "total": total, "indice": indice,
+        "folhas": 1, "folha_atual": 0, "avisos": resultado.avisos, "motor": "local",
+        "geometria": _geometria(
+            formato, resultado.imagem, uma_etiqueta=not formato.colunas_no_zpl
+        ),
+        "pdf": info,
+    }
 
 
 def _geometria(formato: formatos.Formato, imagem: Image.Image, *,

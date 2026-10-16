@@ -2,7 +2,9 @@
 
 Aplicativo local para **ver e imprimir etiqueta ZPL**. Faz o que o visualizador
 do Labelary faz, mas **sem internet**, entendendo etiqueta de **duas colunas** e
-imprimindo direto na térmica USB.
+imprimindo direto na térmica USB. Também imprime a etiqueta que o Mercado Livre
+entrega em **PDF**: acha a etiqueta dentro da folha A4 e a encaixa no tamanho do
+rolo, sem distorcer o código de barras.
 
 Não pede login, não fala com o Mercado Livre e não guarda credencial nenhuma.
 
@@ -67,6 +69,7 @@ O passo a passo para publicar uma versão nova no GitHub está em
 | Preciso de… | Vá para |
 |---|---|
 | desenhar ZPL na tela | `src/eleva_impressao/render.py` |
+| etiqueta em PDF | `src/eleva_impressao/pdf.py` |
 | código de barras e QR | `src/eleva_impressao/barras.py` |
 | formatos de etiqueta | `src/eleva_impressao/formatos.py` |
 | ajuste automático do texto | `src/eleva_impressao/ajuste.py` |
